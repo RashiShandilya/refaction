@@ -5,6 +5,7 @@ using Newtonsoft.Json;
 
 namespace refactor_me.Models
 {
+    //test me
     public class Products
     {
         public List<Product> Items { get; private set; }
