@@ -4,116 +4,222 @@ using System.Web.Http;
 using refactor_me.Context;
 using System.Linq;
 using System.Net.Http;
+using refactor_me.Helpers;
+using System.Collections.Generic;
+using System.Data.Entity.Core;
 
 namespace refactor_me.Controllers
 {
      [RoutePrefix("products")]
     public class ProductsController : ApiController
-    {
-        private ProductContext db = new ProductContext();
-        
-        [HttpGet]
-        public IQueryable<Product> GetAll()
+    {       
+        private readonly IProductService _productService;
+        public ProductsController() { }
+     
+
+        public ProductsController(IProductService productService)
         {
-            return db.Products;
+            _productService = productService;
+        }
+
+        [HttpGet]
+        public IEnumerable<Product> GetAll()
+        {
+            IEnumerable<Product> products = null;
+            HttpResponseMessage errorResponse = null;
+
+            try
+            {
+                products = _productService.GetAll();
+                if (!products.Any() || products == null)
+                     errorResponse = Request.CreateErrorResponse(HttpStatusCode.NotFound, "The product could not be found.");
+            }
+            catch
+            {
+                // In case our back-end throws an exception, don't allow this to be returned to the user.
+                // Instead, ignore the exception and return InternalServerError.
+                errorResponse = Request.CreateErrorResponse(HttpStatusCode.InternalServerError, "An unexpected error occurred.");
+            }
+
+            // If there is an error, throw an HttpResponseException, which will automatically create an error response with a message in the body.
+            if (errorResponse != null)
+                throw new HttpResponseException(errorResponse);
+
+            return products;           
         }
 
 
         [HttpGet]
         public IQueryable<Product> SearchByName(string name)
         {
-            return db.Products.Where(b => b.Name.Contains(name.ToLower()));
+            IQueryable<Product> productNames = null;
+            HttpResponseMessage errorResponse = null;
+
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    productNames = _productService.SearchByName(name.Trim());
+                    if (productNames == null)
+                        errorResponse = Request.CreateErrorResponse(HttpStatusCode.NotFound, "The product name could not be found.");
+                }
+                else
+                {
+                    errorResponse = Request.CreateErrorResponse(HttpStatusCode.BadRequest, "Characters to search product name is invalid.");
+                }
+            }
+            catch
+            {   // In case our back-end throws an exception, don't allow this to be returned to the user.
+                // Instead, ignore the exception and return InternalServerError.
+                errorResponse = Request.CreateErrorResponse(HttpStatusCode.InternalServerError, "An unexpected error occurred.");
+            }
+
+            // If there is an error, throw an HttpResponseException, which will automatically create an error response with a message in the body.
+            if (errorResponse != null)
+                throw new HttpResponseException(errorResponse);
+
+            return productNames;           
 
         }
     
         [HttpGet]
         public Product GetProduct(Guid id)
         {
-            Product item = db.Products.FirstOrDefault(p => p.Id == id);
-            if (item == null)
+            Product product = null;
+            HttpResponseMessage errorResponse = null;
+
+            try
             {
-                var message = string.Format("Product with id = {0} not found", id);
-                throw new HttpResponseException(
-                    Request.CreateErrorResponse(HttpStatusCode.NotFound, message));
+                if (id != Guid.Empty || id != null)
+                {
+                    product = _productService.GetProduct(id);                    
+                    if (product == null)
+                    {
+                        var message = string.Format("Product with id = {0} not found", id);
+                        errorResponse = Request.CreateErrorResponse(HttpStatusCode.NotFound, message);
+                    }
+                }
+                else
+                {
+                    var message = string.Format("Product id is invalid");
+                    errorResponse = Request.CreateErrorResponse(HttpStatusCode.BadRequest, message);
+                }
             }
-            else
+            catch
+            {   
+                // In case our back-end throws an exception, don't allow this to be returned to the user.
+                // Instead, ignore the exception and return InternalServerError.             
+                errorResponse = Request.CreateErrorResponse(HttpStatusCode.InternalServerError, "An unexpected error occurred.");
+            }
+
+            // If there is an error, throw an HttpResponseException, which will automatically create an error response with a message in the body.
+            if (errorResponse != null)
             {
-                return item;
+                throw new HttpResponseException(errorResponse);
             }
+
+            return product;
         }
 
 
         [HttpPost]
         public HttpResponseMessage Create(Product product)
-        {
+        {          
+
+            HttpResponseMessage errorResponse = null;
+
             try
             {
-                db.Products.Add(product);
-                db.SaveChanges();
-
-                var message = Request.CreateResponse(HttpStatusCode.Created, product);
-                message.Headers.Location = new Uri(Request.RequestUri + product.Id.ToString());
-
-                return message;
-            }
-            catch (Exception ex)
+                if (product == null)                
+                    errorResponse = Request.CreateErrorResponse(HttpStatusCode.BadRequest, "Product data must be supplied.");                
+                else                
+                    _productService.Create(product);
+            }            
+            catch
             {
-                return Request.CreateErrorResponse(HttpStatusCode.BadRequest, ex);
+                errorResponse = Request.CreateErrorResponse(HttpStatusCode.InternalServerError, "An unexpected error occurred.");
             }
+
+            if (errorResponse != null)
+                throw new HttpResponseException(errorResponse);
+
+            return Request.CreateResponse(HttpStatusCode.OK, product);
+
         }
         
         
         [HttpPut]
         public HttpResponseMessage Update(Guid id, Product product)
-        {
+        {          
+
+            HttpResponseMessage errorResponse = null;
+
             try
             {
-                var entity = db.Products.FirstOrDefault(e => e.Id == id);
-                if (entity == null)
-                {
-                    var message = string.Format("Product with Id " + id.ToString() + " not found to update");
-                    return Request.CreateErrorResponse(HttpStatusCode.NotFound, message);
-                }
+                if (product == null)
+                    errorResponse = Request.CreateErrorResponse(HttpStatusCode.BadRequest, "Product data must be supplied.");
+                else if (id == Guid.Empty || id == null)
+                    errorResponse = Request.CreateErrorResponse(HttpStatusCode.BadRequest, "Product id is invalid.");
                 else
                 {
-                    entity.Name = product.Name;
-                    entity.Description = product.Description;
-                    entity.DeliveryPrice = product.DeliveryPrice;
-                    entity.Price = product.Price;
-
-                    db.SaveChanges();
-                    return Request.CreateResponse(HttpStatusCode.OK, entity);
+                    var productExist = _productService.GetProduct(id);
+                    if (productExist == null)
+                    {
+                        var message = string.Format("Product with id = {0} not found", id);
+                        errorResponse = Request.CreateErrorResponse(HttpStatusCode.NotFound, message);
+                    }
+                    else
+                    {
+                        _productService.Update(id, product);
+                    }
                 }
             }
-            catch (Exception ex)
+            catch
             {
-                return Request.CreateErrorResponse(HttpStatusCode.BadRequest, ex);
+                errorResponse = Request.CreateErrorResponse(HttpStatusCode.InternalServerError, "An unexpected error occurred.");
             }
+
+            if (errorResponse != null)
+                throw new HttpResponseException(errorResponse);
+
+            return Request.CreateResponse(HttpStatusCode.OK, product);
         }
 
        
         [HttpDelete]
         public HttpResponseMessage Delete(Guid id)
-        {
+        {            
+
+            HttpResponseMessage errorResponse = null;
+            Product product = null;
+
             try
             {
-                var entity = db.Products.FirstOrDefault(p => p.Id == id);
-                if (entity == null)
+                if (id != Guid.Empty || id != null)
                 {
-                    return Request.CreateErrorResponse(HttpStatusCode.NotFound,
-                        "Product with Id = " + id.ToString() + " not found to delete");
+                    product = _productService.GetProduct(id);
+                    if (product != null)
+                        _productService.Delete(product);  
+                    else
+                        errorResponse = Request.CreateErrorResponse(HttpStatusCode.NotFound, "Product with Id = " + id.ToString() + " not found to delete");
+
                 }
                 else
                 {
-                    db.Products.Remove(entity);
-                    db.SaveChanges();
-                    return Request.CreateResponse(HttpStatusCode.OK);
+                    errorResponse = Request.CreateErrorResponse(HttpStatusCode.BadRequest, "The product id invalid.");
                 }
-            }
-            catch (Exception ex)
+            }           
+            catch
             {
-                return Request.CreateErrorResponse(HttpStatusCode.BadRequest, ex);
+                errorResponse = Request.CreateErrorResponse(HttpStatusCode.InternalServerError, "An unexpected error occurred.");
             }
+
+            if (errorResponse != null)
+            {
+                throw new HttpResponseException(errorResponse);
+            }
+
+            return Request.CreateResponse(HttpStatusCode.OK, product);
         }
 
 
@@ -122,100 +228,180 @@ namespace refactor_me.Controllers
         [HttpGet]
         public IQueryable<ProductOption> GetOptions(Guid productId)
         {
-            return db.ProductOptions.Where(p => p.ProductId == productId);
+            IQueryable<ProductOption> productOptions = null;
+            HttpResponseMessage errorResponse = null;
+
+            try
+            {
+                if (productId != Guid.Empty || productId != null)
+                {
+                    productOptions = _productService.GetOptions(productId);
+                    if (productOptions == null)
+                    {
+                        var message = string.Format("Product options with id = {0} not found", productId);
+                        errorResponse = Request.CreateErrorResponse(HttpStatusCode.NotFound, message);
+                    }
+                }
+                else
+                {
+                    var message = string.Format("Product option id is invalid");
+                    errorResponse = Request.CreateErrorResponse(HttpStatusCode.BadRequest, message);
+                }
+            }
+            catch
+            {
+                // In case our back-end throws an exception, don't allow this to be returned to the user.
+                // Instead, ignore the exception and return InternalServerError.             
+                errorResponse = Request.CreateErrorResponse(HttpStatusCode.InternalServerError, "An unexpected error occurred.");
+            }
+
+            // If there is an error, throw an HttpResponseException, which will automatically create an error response with a message in the body.
+            if (errorResponse != null)
+            {
+                throw new HttpResponseException(errorResponse);
+            }
+
+            return productOptions;
         }
 
 
         [ActionName("options")]
         [HttpGet]
         public ProductOption GetOption(Guid productId, Guid id)
-        {
-            ProductOption option = db.ProductOptions.FirstOrDefault(p => p.Id == id && p.ProductId == productId);
-            if (option == null)
+        {          
+
+            ProductOption productOption = null;
+            HttpResponseMessage errorResponse = null;
+
+            try
             {
-                var message = string.Format("Product Option with id = {0} and productId = {1} not found", id, productId);
-                throw new HttpResponseException(
-                    Request.CreateErrorResponse(HttpStatusCode.NotFound, message));
+                if (id != null || productId != null)
+                {
+                    productOption = _productService.GetOption(productId,id);
+                    if (productOption == null)
+                    {
+                        var message = string.Format("Product Option not found");
+                        errorResponse = Request.CreateErrorResponse(HttpStatusCode.NotFound, message);
+                    }
+                }
+                else
+                {
+                    var message = string.Format("Product option ids are invalid");
+                    errorResponse = Request.CreateErrorResponse(HttpStatusCode.BadRequest, message);
+                }
             }
-            else
+            catch
             {
-                return option;
+                // In case our back-end throws an exception, don't allow this to be returned to the user.
+                // Instead, ignore the exception and return InternalServerError.             
+                errorResponse = Request.CreateErrorResponse(HttpStatusCode.InternalServerError, "An unexpected error occurred.");
             }
+
+            // If there is an error, throw an HttpResponseException, which will automatically create an error response with a message in the body.
+            if (errorResponse != null)
+            {
+                throw new HttpResponseException(errorResponse);
+            }
+
+            return productOption;
         }
 
         [ActionName("options")]
         [HttpPost]
         public HttpResponseMessage CreateOption(Guid productId, ProductOption option)
-        {
+        {        
+
+            HttpResponseMessage errorResponse = null;
+
             try
             {
-                option.ProductId = productId;
-                db.ProductOptions.Add(option);
-                db.SaveChanges();
-
-                var message = Request.CreateResponse(HttpStatusCode.Created, option);
-                message.Headers.Location = new Uri(Request.RequestUri + option.Id.ToString());
-                return message;
+                if (option == null)
+                    errorResponse = Request.CreateErrorResponse(HttpStatusCode.BadRequest, "Product option data must be supplied.");
+                else
+                    _productService.CreateOption(productId,option);
             }
-            catch (Exception ex)
+            catch
             {
-                return Request.CreateErrorResponse(HttpStatusCode.BadRequest, ex);
+                errorResponse = Request.CreateErrorResponse(HttpStatusCode.InternalServerError, "An unexpected error occurred.");
             }
+
+            if (errorResponse != null)
+                throw new HttpResponseException(errorResponse);
+
+            return Request.CreateResponse(HttpStatusCode.Created, option);
         }
 
 
+       
         [ActionName("options")]
         [HttpPut]
         public HttpResponseMessage UpdateOption(Guid id, ProductOption option)
         {
+
+            HttpResponseMessage errorResponse = null;
+
             try
             {
-                var entity = db.ProductOptions.FirstOrDefault(e => e.Id == id);
-                if (entity == null)
-                {
-                    var message = string.Format("Product Option with Id " + id.ToString() + " not found to update");
-                    return Request.CreateErrorResponse(HttpStatusCode.NotFound, message);
-                }
+                if (option == null)
+                    errorResponse = Request.CreateErrorResponse(HttpStatusCode.BadRequest, "Product option data must be supplied.");
+                else if (id == null)
+                    errorResponse = Request.CreateErrorResponse(HttpStatusCode.BadRequest, "Product option id is invalid.");
                 else
                 {
-                    entity.ProductId = option.ProductId;
-                    entity.Name = option.Name;
-                    entity.Description = option.Description;
-
-                    db.SaveChanges();
-
-                    return Request.CreateResponse(HttpStatusCode.OK, entity);
+                    var productOptionExist = _productService.GetOption(id, Guid.Empty);
+                    if (productOptionExist == null)
+                    {
+                        var message = string.Format("Product option with id = {0} not found", id);
+                        errorResponse = Request.CreateErrorResponse(HttpStatusCode.NotFound, message);
+                    }
+                    else
+                    {
+                        _productService.UpdateOption(id, option);
+                    }
                 }
             }
-            catch (Exception ex)
+            catch
             {
-                return Request.CreateErrorResponse(HttpStatusCode.BadRequest, ex);
+                errorResponse = Request.CreateErrorResponse(HttpStatusCode.InternalServerError, "An unexpected error occurred.");
             }
+
+            if (errorResponse != null)
+                throw new HttpResponseException(errorResponse);
+
+            return Request.CreateResponse(HttpStatusCode.OK, option);
         }
-           
+
         [ActionName("options")]
         [HttpDelete]
         public HttpResponseMessage DeleteOption(Guid id)
         {
+
+            HttpResponseMessage errorResponse = null;
+            ProductOption option = null;
+
             try
             {
-                var entity = db.ProductOptions.FirstOrDefault(p => p.Id == id);
-                if (entity == null)
+                if (id != null)
                 {
-                    return Request.CreateErrorResponse(HttpStatusCode.NotFound,
-                        "Product Option with Id = " + id.ToString() + " not found to delete");
+                    option = _productService.GetOption(Guid.Empty, id);
+                    if (option != null)
+                        _productService.DeleteOption(option);
+                    else
+                        errorResponse = Request.CreateErrorResponse(HttpStatusCode.NotFound, "Product option with Id = " + id.ToString() + " not found to delete");
+
                 }
                 else
-                {
-                    db.ProductOptions.Remove(entity);
-                    db.SaveChanges();
-                    return Request.CreateResponse(HttpStatusCode.OK);
-                }
+                    errorResponse = Request.CreateErrorResponse(HttpStatusCode.BadRequest, "The product option id invalid.");
             }
-            catch (Exception ex)
+            catch
             {
-                return Request.CreateErrorResponse(HttpStatusCode.BadRequest, ex);
+                errorResponse = Request.CreateErrorResponse(HttpStatusCode.InternalServerError, "An unexpected error occurred.");
             }
+
+            if (errorResponse != null)
+                throw new HttpResponseException(errorResponse);
+
+            return Request.CreateResponse(HttpStatusCode.OK, option);
         }
     }
 }
