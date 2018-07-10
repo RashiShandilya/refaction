@@ -17,8 +17,7 @@ namespace refactor_me
             
             container.RegisterType<IProductService, ProductService>();
             
-            GlobalConfiguration.Configuration.DependencyResolver = new UnityDependencyResolver(container);
-            //DependencyResolver.SetResolver(new UnityDependencyResolver(container));
+            GlobalConfiguration.Configuration.DependencyResolver = new UnityDependencyResolver(container);           
         }
     }
 }

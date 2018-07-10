@@ -16,7 +16,7 @@ namespace refactor_me.Helpers
             return db.Products;
         }
 
-        public IQueryable<Product> SearchByName(string name)
+        public IEnumerable<Product> SearchByName(string name)
         {
             return db.Products.Where(b => b.Name.Contains(name.ToLower()));
 
@@ -51,7 +51,7 @@ namespace refactor_me.Helpers
             db.SaveChanges();
         }
 
-        public IQueryable<ProductOption> GetOptions(Guid productId)
+        public IEnumerable<ProductOption> GetOptions(Guid productId)
         {
            return db.ProductOptions.Where(p => p.ProductId == productId);
         }

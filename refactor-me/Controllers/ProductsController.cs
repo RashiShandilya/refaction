@@ -50,9 +50,9 @@ namespace refactor_me.Controllers
 
 
         [HttpGet]
-        public IQueryable<Product> SearchByName(string name)
+        public IEnumerable<Product> SearchByName(string name)
         {
-            IQueryable<Product> productNames = null;
+            IEnumerable<Product> productNames = null;
             HttpResponseMessage errorResponse = null;
 
             try
@@ -90,7 +90,7 @@ namespace refactor_me.Controllers
 
             try
             {
-                if (id != Guid.Empty || id != null)
+                if (id != Guid.Empty && id != null)
                 {
                     product = _productService.GetProduct(id);                    
                     if (product == null)
@@ -158,7 +158,7 @@ namespace refactor_me.Controllers
             {
                 if (product == null)
                     errorResponse = Request.CreateErrorResponse(HttpStatusCode.BadRequest, "Product data must be supplied.");
-                else if (id == Guid.Empty || id == null)
+                else if (id == Guid.Empty && id == null)
                     errorResponse = Request.CreateErrorResponse(HttpStatusCode.BadRequest, "Product id is invalid.");
                 else
                 {
@@ -195,7 +195,7 @@ namespace refactor_me.Controllers
 
             try
             {
-                if (id != Guid.Empty || id != null)
+                if (id != Guid.Empty && id != null)
                 {
                     product = _productService.GetProduct(id);
                     if (product != null)
@@ -212,12 +212,7 @@ namespace refactor_me.Controllers
             catch
             {
                 errorResponse = Request.CreateErrorResponse(HttpStatusCode.InternalServerError, "An unexpected error occurred.");
-            }
-
-            if (errorResponse != null)
-            {
-                throw new HttpResponseException(errorResponse);
-            }
+            }           
 
             return Request.CreateResponse(HttpStatusCode.OK, product);
         }
@@ -226,14 +221,14 @@ namespace refactor_me.Controllers
   
         [ActionName("options")]
         [HttpGet]
-        public IQueryable<ProductOption> GetOptions(Guid productId)
+        public IEnumerable<ProductOption> GetOptions(Guid productId)
         {
-            IQueryable<ProductOption> productOptions = null;
+            IEnumerable<ProductOption> productOptions = null;
             HttpResponseMessage errorResponse = null;
 
             try
             {
-                if (productId != Guid.Empty || productId != null)
+                if (productId != Guid.Empty && productId != null)
                 {
                     productOptions = _productService.GetOptions(productId);
                     if (productOptions == null)
